@@ -73,8 +73,9 @@ void zmq::socks_greeting_encoder_t::encode (const socks_greeting_t &greeting_)
 
 int zmq::socks_greeting_encoder_t::output (fd_t fd_)
 {
+    bool f = false;
     const int rc = tcp_write (
-        fd_, buf + bytes_written, bytes_encoded - bytes_written);
+        fd_, buf + bytes_written, bytes_encoded - bytes_written, &f);
     if (rc > 0)
         bytes_written += static_cast <size_t> (rc);
     return rc;
@@ -193,8 +194,9 @@ void zmq::socks_request_encoder_t::encode (const socks_request_t &req)
 
 int zmq::socks_request_encoder_t::output (fd_t fd_)
 {
+    bool f = false;
     const int rc = tcp_write (
-        fd_, buf + bytes_written, bytes_encoded - bytes_written);
+        fd_, buf + bytes_written, bytes_encoded - bytes_written, &f);
     if (rc > 0)
         bytes_written += static_cast <size_t> (rc);
     return rc;

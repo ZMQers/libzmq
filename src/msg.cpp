@@ -139,6 +139,7 @@ int zmq::msg_t::init_external_storage(content_t* content_, void* data_, size_t s
     u.zclmsg.content->size = size_;
     u.zclmsg.content->ffn = ffn_;
     u.zclmsg.content->hint = hint_;
+    u.zclmsg.content->zero_copy_id = 0;
     new (&u.zclmsg.content->refcnt) zmq::atomic_counter_t();
 
     return 0;
@@ -177,6 +178,7 @@ int zmq::msg_t::init_data (void *data_, size_t size_,
         u.lmsg.content->size = size_;
         u.lmsg.content->ffn = ffn_;
         u.lmsg.content->hint = hint_;
+        u.lmsg.content->zero_copy_id = 0;
         new (&u.lmsg.content->refcnt) zmq::atomic_counter_t ();
     }
     return 0;
@@ -443,6 +445,11 @@ bool zmq::msg_t::is_zcmsg() const
     return u.base.type == type_zclmsg;
 }
 
+bool zmq::msg_t::is_lmsg() const
+{
+    return u.base.type == type_lmsg;
+}
+
 bool zmq::msg_t::is_join() const
 {
     return u.base.type == type_join;
@@ -561,6 +568,21 @@ int zmq::msg_t::set_group (const char * group_, size_t length_)
     u.base.group[length_] = '\0';
 
     return 0;
+}
+
+uint32_t zmq::msg_t::zero_copy_id ()
+{
+    if (u.base.type == type_lmsg) {
+        return u.lmsg.content->zero_copy_id;
+    }
+    return 0;
+}
+
+void zmq::msg_t::set_zero_copy_id (uint32_t zero_copy_id_)
+{
+    if (u.base.type == type_lmsg) {
+        u.lmsg.content->zero_copy_id = zero_copy_id_;
+    }
 }
 
 zmq::atomic_counter_t *zmq::msg_t::refcnt()

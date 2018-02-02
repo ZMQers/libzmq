@@ -61,11 +61,11 @@ int main (void) {
     // Test that creating and closing a message triggers ffn
     zmq_msg_t msg;
     char hint[5];
-    char data[255];
-    memset(data, 0, 255);
+    char data[4096];
+    memset(data, 0, 4096);
     memcpy(data, (void *) "data", 4);
     memcpy(hint, (void *) "hint", 4);
-    rc = zmq_msg_init_data(&msg, (void *)data, 255, ffn, (void*)hint);
+    rc = zmq_msg_init_data(&msg, (void *)data, 4096, ffn, (void*)hint);
     assert (rc == 0);
     rc = zmq_msg_close(&msg);
     assert (rc == 0);
@@ -77,7 +77,7 @@ int main (void) {
     // Making and closing a copy triggers ffn
     zmq_msg_t msg2;
     zmq_msg_init(&msg2);
-    rc = zmq_msg_init_data(&msg, (void *)data, 255, ffn, (void *)hint);
+    rc = zmq_msg_init_data(&msg, (void *)data, 4096, ffn, (void *)hint);
     assert (rc == 0);
     rc = zmq_msg_copy(&msg2, &msg);
     assert (rc == 0);
@@ -91,15 +91,15 @@ int main (void) {
     memcpy(hint, (void *) "hint", 4);
 
     // Test that sending a message triggers ffn
-    rc = zmq_msg_init_data(&msg, (void *)data, 255, ffn, (void *)hint);
+    rc = zmq_msg_init_data(&msg, (void *)data, 4096, ffn, (void *)hint);
     assert (rc == 0);
 
     zmq_msg_send(&msg, dealer, 0);
-    char buf[255];
-    rc = zmq_recv(router, buf, 255, 0);
+    char buf[4096];
+    rc = zmq_recv(router, buf, 4096, 0);
     assert (rc > -1);
-    rc = zmq_recv(router, buf, 255, 0);
-    assert (rc == 255);
+    rc = zmq_recv(router, buf, 4096, 0);
+    assert (rc == 4096);
     assert (memcmp(data, buf, 4) == 0);
 
     msleep (SETTLE_TIME);
@@ -111,16 +111,16 @@ int main (void) {
     // Sending a copy of a message triggers ffn
     rc = zmq_msg_init(&msg2);
     assert (rc == 0);
-    rc = zmq_msg_init_data(&msg, (void *)data, 255, ffn, (void *)hint);
+    rc = zmq_msg_init_data(&msg, (void *)data, 4096, ffn, (void *)hint);
     assert (rc == 0);
     rc = zmq_msg_copy(&msg2, &msg);
     assert (rc == 0);
 
     zmq_msg_send(&msg, dealer, 0);
-    rc = zmq_recv(router, buf, 255, 0);
+    rc = zmq_recv(router, buf, 4096, 0);
     assert (rc > -1);
-    rc = zmq_recv(router, buf, 255, 0);
-    assert (rc == 255);
+    rc = zmq_recv(router, buf, 4096, 0);
+    assert (rc == 4096);
     assert (memcmp(data, buf, 4) == 0);
     rc = zmq_msg_close(&msg2);
     assert (rc == 0);

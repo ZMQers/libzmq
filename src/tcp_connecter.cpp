@@ -318,6 +318,8 @@ int zmq::tcp_connecter_t::open ()
     if (options.rcvbuf >= 0)
         set_tcp_receive_buffer (s, options.rcvbuf);
 
+    set_tcp_zero_copy (s);
+
     // Set the IP Type-Of-Service for the underlying socket
     if (options.tos != 0)
         set_ip_type_of_service (s, options.tos);

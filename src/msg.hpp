@@ -71,6 +71,7 @@ namespace zmq
             msg_free_fn *ffn;
             void *hint;
             zmq::atomic_counter_t refcnt;
+            uint32_t zero_copy_id;
         };
 
         //  Message flags.
@@ -117,12 +118,15 @@ namespace zmq
         bool is_vsm () const;
         bool is_cmsg () const;
         bool is_zcmsg() const;
+        bool is_lmsg() const;
         uint32_t get_routing_id ();
         int set_routing_id (uint32_t routing_id_);
         int reset_routing_id ();
         const char * group ();
         int set_group (const char* group_);
         int set_group (const char*, size_t length);
+        uint32_t zero_copy_id ();
+        void set_zero_copy_id (uint32_t zero_copy_id_);
 
         //  After calling this function you can copy the message in POD-style
         //  refs_ times. No need to call copy.

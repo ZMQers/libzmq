@@ -222,6 +222,8 @@ int zmq::tcp_listener_t::set_address (const char *addr_)
     if (options.rcvbuf >= 0)
         set_tcp_receive_buffer (s, options.rcvbuf);
 
+    set_tcp_zero_copy (s);
+
     //  Allow reusing of the address.
     int flag = 1;
 #ifdef ZMQ_HAVE_WINDOWS

@@ -39,10 +39,22 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <linux/errqueue.h>
 #endif
 
 #if defined ZMQ_HAVE_OPENVMS
 #include <ioctl.h>
+#endif
+
+//  defined in newer glibcs, but value is already a stable kernel API
+#ifndef MSG_ZEROCOPY
+#define MSG_ZEROCOPY 0x4000000
+#endif
+#ifndef SO_EE_ORIGIN_ZEROCOPY
+#define SO_EE_ORIGIN_ZEROCOPY       5
+#endif
+#ifndef PACKET_TX_TIMESTAMP
+#define PACKET_TX_TIMESTAMP     16
 #endif
 
 int zmq::tune_tcp_socket (fd_t s_)
@@ -79,6 +91,17 @@ int zmq::set_tcp_receive_buffer (fd_t sockfd_, int bufsize_)
 {
     const int rc = setsockopt (sockfd_, SOL_SOCKET, SO_RCVBUF,
         (char *) &bufsize_, sizeof bufsize_);
+    tcp_assert_tuning_error (sockfd_, rc);
+    return rc;
+}
+
+int zmq::set_tcp_zero_copy (fd_t sockfd_)
+{
+    const int enable = 1;
+    const int rc = setsockopt (sockfd_, SOL_SOCKET, SO_ZEROCOPY,
+        &enable, sizeof enable);
+    if (rc != 0 && errno == ENOPROTOOPT)
+        return rc;
     tcp_assert_tuning_error (sockfd_, rc);
     return rc;
 }
@@ -191,7 +214,7 @@ int zmq::tune_tcp_maxrt (fd_t sockfd_, int timeout_)
     return 0;
 }
 
- int zmq::tcp_write (fd_t s_, const void *data_, size_t size_)
+ int zmq::tcp_write (fd_t s_, const void *data_, size_t size_, bool *zero_copy)
 {
 #ifdef ZMQ_HAVE_WINDOWS
 
@@ -224,7 +247,17 @@ int zmq::tune_tcp_maxrt (fd_t sockfd_, int timeout_)
     return nbytes;
 
 #else
-    ssize_t nbytes = send (s_, data_, size_, 0);
+    //  Zero copy send has its own cost, so it is not conveniente for small
+    //  writes.
+    //  TODO: fix heuristic: docs say 10 KB is the suggested value
+    ssize_t nbytes = send (s_, data_, size_, size_ > 1024 && *zero_copy ? MSG_ZEROCOPY : 0);
+    //  signal the caller that the send was zero-copy to avoid freeing the msg
+    if (*zero_copy && size_ > 1024 && nbytes <= 0)
+        *zero_copy = false;
+
+    //  Fallback to normal send if zero copy fails
+    if (nbytes == -1 && errno == ENOBUFS)
+        nbytes = send (s_, data_, size_, 0);
 
     //  Several errors are OK. When speculative write is being done we may not
     //  be able to write a single byte from the socket. Also, SIGSTOP issued
@@ -250,6 +283,55 @@ int zmq::tune_tcp_maxrt (fd_t sockfd_, int timeout_)
     return static_cast <int> (nbytes);
 
 #endif
+}
+
+int zmq::tcp_zero_copy_check_callbacks (fd_t s_, uint32_t *begin,
+        uint32_t *end)
+{
+    struct msghdr msg = { };
+    struct sock_extended_err *serr;
+    struct cmsghdr *cm;
+    int ret;
+    char control_buffer[100] = { 0 };
+
+    msg.msg_control = control_buffer;
+    msg.msg_controllen = sizeof(100);
+
+    ret = recvmsg(s_, &msg, MSG_ERRQUEUE);
+    if (ret == -1 && errno == EAGAIN)
+        return -1;
+    if (ret == -1) {
+        zmq_assert("recvmsg notification");
+        return -1;
+    }
+    if (msg.msg_flags & MSG_CTRUNC) {
+        zmq_assert("recvmsg notification: truncated");
+        return -1;
+    }
+
+    cm = CMSG_FIRSTHDR(&msg);
+    if (!cm) {
+        zmq_assert("cmsg: no cmsg");
+        return -1;
+    }
+    if (!((cm->cmsg_level == SOL_IP && cm->cmsg_type == IP_RECVERR)
+            || (cm->cmsg_level == SOL_IPV6 && cm->cmsg_type == IPV6_RECVERR)
+            || (cm->cmsg_level == SOL_PACKET
+                    && cm->cmsg_type == PACKET_TX_TIMESTAMP))) {
+        zmq_assert("serr: wrong type: %d.%d cm->cmsg_level, cm->cmsg_type");
+        return -1;
+    }
+
+    serr = (sock_extended_err *)CMSG_DATA(cm);
+    if (serr->ee_origin != SO_EE_ORIGIN_ZEROCOPY)
+        zmq_assert("serr: wrong origin: %u  serr->ee_origin");
+    if (serr->ee_errno != 0)
+        zmq_assert("serr: wrong error code: %u serr->ee_errno");
+
+    *end = serr->ee_data;
+    *begin = serr->ee_info;
+
+    return 0;
 }
 
 int zmq::tcp_read (fd_t s_, void *data_, size_t size_)

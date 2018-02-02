@@ -132,6 +132,9 @@ namespace zmq
         //  Underlying socket.
         fd_t s;
 
+        uint32_t zero_copy_counter;
+        std::vector<zmq::msg_t> free_list;
+
         //  True iff this is server's engine.
         bool as_server;
 

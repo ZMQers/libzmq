@@ -364,6 +364,9 @@ void zmq::stream_engine_t::in_event ()
 
 void zmq::stream_engine_t::out_event ()
 {
+    static uint8_t free_skip = 0;
+    bool zero_copy = false;
+
     zmq_assert (!io_error);
 
     //  If write buffer is empty, try to read new data from the encoder.
@@ -384,6 +387,7 @@ void zmq::stream_engine_t::out_event ()
             if ((this->*next_msg) (&tx_msg) == -1)
                 break;
             encoder->load_msg (&tx_msg);
+            zero_copy = tx_msg.is_lmsg() ? true : false;
             unsigned char *bufptr = outpos + outsize;
             size_t n = encoder->encode (&bufptr, out_batch_size - outsize);
             zmq_assert (n > 0);
@@ -405,7 +409,27 @@ void zmq::stream_engine_t::out_event ()
     //  arbitrarily large. However, we assume that underlying TCP layer has
     //  limited transmission buffer and thus the actual number of bytes
     //  written should be reasonably modest.
-    const int nbytes = tcp_write (s, outpos, outsize);
+    const int nbytes = tcp_write (s, outpos, outsize, &zero_copy);
+    if (zero_copy) {
+        tx_msg.set_zero_copy_id(++zero_copy_counter);
+        zmq::msg_t msg;
+        msg.copy (tx_msg);
+        free_list.push_back (msg);
+        ++free_skip;
+    }
+    if (free_skip % 64 == 0) {
+        free_skip = 0;
+        uint32_t begin = 0, end = 0;
+        int rc = tcp_zero_copy_check_callbacks (s, &begin, &end);
+        if (rc != -1) {
+            for(std::vector<zmq::msg_t>::iterator it = free_list.begin(); it != free_list.end(); it++)    {
+                if (it->zero_copy_id () >= begin && it->zero_copy_id () <= end) {
+                    it->close();
+                }
+            }
+        }
+    }
+
 
     //  IO error has occurred. We stop waiting for output events.
     //  The engine is not terminated until we detect input error;
