@@ -722,7 +722,7 @@ const char *zmq_msg_gets (const zmq_msg_t *msg_, const char *property_)
     }
 }
 
-    // Polling.
+// Polling.
 
 #if defined ZMQ_HAVE_POLLER
 inline int zmq_poller_poll (zmq_pollitem_t *items_, int nitems_, long timeout_)
@@ -1539,7 +1539,7 @@ int zmq_has (const char *capability)
 #endif
 #if defined(ZMQ_BUILD_DRAFT_API)
     if (strcmp (capability, "draft") == 0)
-        return true;
+    return true;
 #endif
     //  Whatever the application asked for, we don't have
     return false;
