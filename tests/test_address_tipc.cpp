@@ -30,14 +30,18 @@
 #include "testutil.hpp"
 #include <unity.h>
 
-void setUp ()
+void *ctx;
+
+void setUp()
 {
+  ctx = zmq_ctx_new();
 }
 void tearDown ()
 {
+  zmq_ctx_term(ctx);
+  ctx = NULL;
 }
 
-void *ctx;
 void test_tipc_port_name_and_domain ()
 {
     TEST_ASSERT_NOT_NULL (ctx);
@@ -135,7 +139,6 @@ void test_tipc_bad_addresses ()
 int main ()
 {
     setup_test_environment ();
-    ctx = zmq_init (1);
 
     UNITY_BEGIN ();
     RUN_TEST (test_tipc_port_name_and_domain);
