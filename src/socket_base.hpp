@@ -157,6 +157,8 @@ class socket_base_t : public own_t,
     virtual int get_peer_state (const void *routing_id_,
                                 size_t routing_id_size_) const;
 
+    void query_pipes_stats ();
+
   protected:
     socket_base_t (zmq::ctx_t *parent_,
                    uint32_t tid_,
@@ -276,6 +278,10 @@ class socket_base_t : public own_t,
     //  Handlers for incoming commands.
     void process_stop ();
     void process_bind (zmq::pipe_t *pipe_);
+    void process_pipe_stats_publish (uint64_t outbound_queue_count_,
+                                     uint64_t inbound_queue_count_,
+                                     std::string *outbound_endpoint_,
+                                     std::string *inbound_endpoint_);
     void process_term (int linger_);
     void process_term_endpoint (std::string *endpoint_);
 

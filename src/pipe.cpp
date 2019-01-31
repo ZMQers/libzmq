@@ -563,3 +563,19 @@ const zmq::endpoint_uri_pair_t &zmq::pipe_t::get_endpoint_pair () const
 {
     return _endpoint_pair;
 }
+
+void zmq::pipe_t::send_stats_to_peer (own_t *socket_base_)
+{
+    std::string *ep = new (std::nothrow) std::string (_endpoint_uri);
+    send_pipe_peer_stats (_peer, _msgs_written - _peers_msgs_read, socket_base_,
+                          ep);
+}
+
+void zmq::pipe_t::process_pipe_peer_stats (uint64_t queue_count_,
+                                           own_t *socket_base_,
+                                           std::string *endpoint_)
+{
+    std::string *ep = new (std::nothrow) std::string (_endpoint_uri);
+    send_pipe_stats_publish (socket_base_, queue_count_,
+                             _msgs_written - _peers_msgs_read, endpoint_, ep);
+}

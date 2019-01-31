@@ -11,6 +11,7 @@ zmq_socket_monitor - monitor socket events
 SYNOPSIS
 --------
 *int zmq_socket_monitor (void '*socket', char '*endpoint', int 'events');*
+*void zmq_socket_monitor_pipes_stats (void '*socket');*
 
 
 DESCRIPTION
@@ -37,6 +38,10 @@ Each event is sent as two frames. The first frame contains an event
 number (16 bits), and an event value (32 bits) that provides additional
 data according to the event number. The second frame contains a string
 that specifies the affected endpoint.
+
+The _zmq_socket_monitor_pipes_stats()_ method triggers an event of type
+ZMQ_EVENT_PIPES_STATS for each connected peer of the monitored socket.
+NOTE: _zmq_socket_monitor_pipes_stats()_ is in DRAFT state.
 
 ----
 The _zmq_socket_monitor()_ method supports only connection-oriented
@@ -147,6 +152,15 @@ ZMQ_EVENT_HANDSHAKE_FAILED_AUTH
 The ZMTP security mechanism handshake failed due to an authentication failure.
 The event value is the status code returned by the ZAP handler (i.e. 300, 
 400 or 500).
+
+ZMQ_EVENT_PIPE_STATS
+~~~~~~~~~~~~~~~~~~~~
+The event value is the number of messages in the queue associated with the
+returned endpoint. This event only triggers after calling the function
+_zmq_socket_monitor_pipes_stats()_.
+NOTE: this measurement is asynchronous, so by the time the message is received
+the internal state might have already changed.
+NOTE: in DRAFT state, not yet available in stable releases.
 
 
 

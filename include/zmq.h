@@ -656,6 +656,11 @@ ZMQ_EXPORT void zmq_threadclose (void *thread_);
 /*  DRAFT Context options                                                     */
 #define ZMQ_ZERO_COPY_RECV 10
 
+/*  DRAFT Socket monitoring events                                            */
+#define ZMQ_EVENT_PIPES_STATS 0x8000
+
+ZMQ_EXPORT void zmq_socket_monitor_pipes_stats (void *s);
+
 /*  DRAFT Socket methods.                                                     */
 ZMQ_EXPORT int zmq_join (void *s, const char *group);
 ZMQ_EXPORT int zmq_leave (void *s, const char *group);

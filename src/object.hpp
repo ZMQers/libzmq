@@ -96,6 +96,15 @@ class object_t
     void send_activate_read (zmq::pipe_t *destination_);
     void send_activate_write (zmq::pipe_t *destination_, uint64_t msgs_read_);
     void send_hiccup (zmq::pipe_t *destination_, void *pipe_);
+    void send_pipe_peer_stats (zmq::pipe_t *destination_,
+                               uint64_t queue_count_,
+                               zmq::own_t *socket_base,
+                               std::string *endpoint_);
+    void send_pipe_stats_publish (zmq::own_t *destination_,
+                                  uint64_t outbound_queue_count_,
+                                  uint64_t inbound_queue_count_,
+                                  std::string *outbound_endpoint_,
+                                  std::string *inbound_endpoint_);
     void send_pipe_term (zmq::pipe_t *destination_);
     void send_pipe_term_ack (zmq::pipe_t *destination_);
     void send_pipe_hwm (zmq::pipe_t *destination_, int inhwm_, int outhwm_);
@@ -117,6 +126,13 @@ class object_t
     virtual void process_activate_read ();
     virtual void process_activate_write (uint64_t msgs_read_);
     virtual void process_hiccup (void *pipe_);
+    virtual void process_pipe_peer_stats (uint64_t queue_count_,
+                                          zmq::own_t *socket_base_,
+                                          std::string *endpoint_);
+    virtual void process_pipe_stats_publish (uint64_t outbound_queue_count_,
+                                             uint64_t inbound_queue_count_,
+                                             std::string *outbound_endpoint_,
+                                             std::string *inbound_endpoint_);
     virtual void process_pipe_term ();
     virtual void process_pipe_term_ack ();
     virtual void process_pipe_hwm (int inhwm_, int outhwm_);

@@ -29,6 +29,7 @@
 
 #include "testutil.hpp"
 #include "testutil_unity.hpp"
+#include "testutil_security.hpp"
 
 // NOTE: on OSX the endpoint returned by ZMQ_LAST_ENDPOINT may be quite long,
 //       ensure we have extra space for that:
@@ -44,7 +45,52 @@ void tearDown ()
     teardown_test_context ();
 }
 
-int test_defaults (int send_hwm_, int msg_cnt_, const char *endpoint)
+void *setup_monitor (void *socket_, const char *endpoint)
+{
+    void *client_mon = NULL;
+
+#ifdef ZMQ_EVENT_PIPES_STATS
+    //  Avoid failures due to monitor EP already being in use
+    char monitor_ep[SOCKET_STRING_LEN * 2];
+    strcpy (monitor_ep, "inproc://monitor-client");
+    strcat (monitor_ep, endpoint);
+    int rc = zmq_socket_monitor (socket_, monitor_ep, ZMQ_EVENT_PIPES_STATS);
+    assert (rc == 0);
+    client_mon = test_context_socket (ZMQ_PAIR);
+    assert (client_mon);
+    rc = zmq_connect (client_mon, monitor_ep);
+    assert (rc == 0);
+#endif
+    return client_mon;
+}
+
+void check_stats_event (void *monitor_, void *monitored_, int expected_)
+{
+#ifdef ZMQ_EVENT_PIPES_STATS
+    zmq_socket_monitor_pipes_stats (monitored_);
+    msleep (SETTLE_TIME * 2);
+    unsigned long int dummy, dummy_size = sizeof (dummy);
+    zmq_getsockopt (monitored_, ZMQ_EVENTS, &dummy, &dummy_size);
+
+    char *endpoint_address;
+    int queue_stat;
+    int event = get_monitor_event (monitor_, &queue_stat, &endpoint_address);
+    TEST_ASSERT_EQUAL_INT (ZMQ_EVENT_PIPES_STATS, event);
+    TEST_ASSERT_TRUE (expected_ >= queue_stat && queue_stat > 0);
+    free (endpoint_address);
+
+    event = get_monitor_event (monitor_, &queue_stat, &endpoint_address);
+    TEST_ASSERT_EQUAL_INT (ZMQ_EVENT_PIPES_STATS, event);
+    //  Only sub message should be inbound
+    TEST_ASSERT_EQUAL_INT (1, queue_stat);
+    free (endpoint_address);
+#endif
+}
+
+int test_defaults (int send_hwm_,
+                   int msg_cnt_,
+                   const char *endpoint,
+                   const bool monitor = false)
 {
     size_t len = SOCKET_STRING_LEN;
     char pub_endpoint[SOCKET_STRING_LEN];
@@ -54,6 +100,10 @@ int test_defaults (int send_hwm_, int msg_cnt_, const char *endpoint)
     TEST_ASSERT_SUCCESS_ERRNO (zmq_bind (pub_socket, endpoint));
     TEST_ASSERT_SUCCESS_ERRNO (
       zmq_getsockopt (pub_socket, ZMQ_LAST_ENDPOINT, pub_endpoint, &len));
+
+    void *client_mon = NULL;
+    if (monitor)
+        client_mon = setup_monitor (pub_socket, pub_endpoint);
 
     // Set up and connect SUB socket
     void *sub_socket = test_context_socket (ZMQ_SUB);
@@ -79,6 +129,9 @@ int test_defaults (int send_hwm_, int msg_cnt_, const char *endpoint)
     TEST_ASSERT_EQUAL_INT (send_hwm_, send_count);
     msleep (SETTLE_TIME);
 
+    if (monitor)
+        check_stats_event (client_mon, pub_socket, send_hwm_);
+
     // Now receive all sent messages
     int recv_count = 0;
     char dummybuff[64];
@@ -89,6 +142,10 @@ int test_defaults (int send_hwm_, int msg_cnt_, const char *endpoint)
     TEST_ASSERT_EQUAL_INT (send_hwm_, recv_count);
 
     // Clean up
+#ifdef ZMQ_EVENT_PIPES_STATS
+    if (monitor)
+        test_context_socket_close (client_mon);
+#endif
     test_context_socket_close (sub_socket);
     test_context_socket_close (pub_socket);
 
@@ -115,7 +172,10 @@ int receive (void *socket_, int *is_termination)
     return recv_count;
 }
 
-int test_blocking (int send_hwm_, int msg_cnt_, const char *endpoint)
+int test_blocking (int send_hwm_,
+                   int msg_cnt_,
+                   const char *endpoint,
+                   const bool monitor = false)
 {
     size_t len = SOCKET_STRING_LEN;
     char pub_endpoint[SOCKET_STRING_LEN];
@@ -125,6 +185,10 @@ int test_blocking (int send_hwm_, int msg_cnt_, const char *endpoint)
     TEST_ASSERT_SUCCESS_ERRNO (zmq_bind (pub_socket, endpoint));
     TEST_ASSERT_SUCCESS_ERRNO (
       zmq_getsockopt (pub_socket, ZMQ_LAST_ENDPOINT, pub_endpoint, &len));
+
+    void *client_mon = NULL;
+    if (monitor)
+        client_mon = setup_monitor (pub_socket, pub_endpoint);
 
     // Set up connect socket
     void *sub_socket = test_context_socket (ZMQ_SUB);
@@ -167,6 +231,9 @@ int test_blocking (int send_hwm_, int msg_cnt_, const char *endpoint)
     // if send_hwm_ < msg_cnt_, we should block at least once:
     TEST_ASSERT (blocked_count > 0);
 
+    if (monitor)
+        check_stats_event (client_mon, pub_socket, send_count);
+
     // dequeue SUB socket again, to make sure XPUB has space to send the termination message
     recv_count += receive (sub_socket, &is_termination);
 
@@ -183,6 +250,10 @@ int test_blocking (int send_hwm_, int msg_cnt_, const char *endpoint)
     TEST_ASSERT_EQUAL_INT (send_count, recv_count);
 
     // Clean up
+#ifdef ZMQ_EVENT_PIPES_STATS
+    if (monitor)
+        test_context_socket_close (client_mon);
+#endif
     test_context_socket_close (sub_socket);
     test_context_socket_close (pub_socket);
 
@@ -256,15 +327,16 @@ void test_reset_hwm ()
 void test_tcp ()
 {
     // send 1000 msg on hwm 1000, receive 1000, on TCP transport
-    TEST_ASSERT_EQUAL_INT (1000,
-                           test_defaults (1000, 1000, "tcp://127.0.0.1:*"));
+    TEST_ASSERT_EQUAL_INT (
+      1000, test_defaults (1000, 1000, "tcp://127.0.0.1:*", true));
 
     // send 100 msg on hwm 100, receive 100
-    TEST_ASSERT_EQUAL_INT (100, test_defaults (100, 100, "tcp://127.0.0.1:*"));
+    TEST_ASSERT_EQUAL_INT (100,
+                           test_defaults (100, 100, "tcp://127.0.0.1:*", true));
 
     // send 6000 msg on hwm 2000, drops above hwm, only receive hwm:
-    TEST_ASSERT_EQUAL_INT (6000,
-                           test_blocking (2000, 6000, "tcp://127.0.0.1:*"));
+    TEST_ASSERT_EQUAL_INT (
+      6000, test_blocking (2000, 6000, "tcp://127.0.0.1:*", true));
 }
 
 void test_inproc ()
@@ -278,9 +350,9 @@ void test_inproc ()
 
 void test_ipc ()
 {
-    TEST_ASSERT_EQUAL_INT (1000, test_defaults (1000, 1000, "ipc://*"));
-    TEST_ASSERT_EQUAL_INT (100, test_defaults (100, 100, "ipc://*"));
-    TEST_ASSERT_EQUAL_INT (6000, test_blocking (2000, 6000, "ipc://*"));
+    TEST_ASSERT_EQUAL_INT (1000, test_defaults (1000, 1000, "ipc://*", true));
+    TEST_ASSERT_EQUAL_INT (100, test_defaults (100, 100, "ipc://*", true));
+    TEST_ASSERT_EQUAL_INT (6000, test_blocking (2000, 6000, "ipc://*", true));
 }
 
 #endif

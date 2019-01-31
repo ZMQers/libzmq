@@ -56,6 +56,11 @@
 /*  DRAFT Context options                                                     */
 #define ZMQ_ZERO_COPY_RECV 10
 
+/*  DRAFT Socket monitoring events                                            */
+#define ZMQ_EVENT_PIPES_STATS 0x8000
+
+void zmq_socket_monitor_pipes_stats (void *s_);
+
 /*  DRAFT Socket methods.                                                     */
 int zmq_join (void *s_, const char *group_);
 int zmq_leave (void *s_, const char *group_);
